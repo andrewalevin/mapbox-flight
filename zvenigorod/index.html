@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>🗺 Moscow</title>
+    <meta property="og:title" content="🗺 Zvenigorod Map" />
+    <meta property="og:description" content="Route from Polushkinot ot Zvenigorod throw Moacow river vallay." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="/maps/zvenigorod/" />
+    <meta property="og:image" content="/maps/zvenigorod/preview.png" />
+
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+
+    <link href="../mapbox/mapbox-v2.css" rel="stylesheet">
+
+    <style>
+        .mapboxgl-marker {
+            border-color: transparent;
+        }
+        
+        .popup-img-container {
+            width: 220px;
+            height: 220px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .popup-img-container img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            display: block;
+            margin: auto;
+        }
+        
+        .marker-interest {
+            border: 1px solid #eeeeee;
+        }
+        
+        .marker-service {}
+    </style>
+
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script src="../mapbox/mapbox-v2-config-default.js"></script>
+
+    <script>
+        config.map.center = [36.717964, 55.681699];
+        config.map.style = 'mapbox://styles/andrewlevin/clurjvodg013d01pe0fqncusu';
+        config.map.zoom = 10;
+    </script>
+
+
+    <script src="../mapbox/js-yaml.min.js"></script>
+
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="../mapbox/mapbox-v2.js"></script>
+
+
+    <script src="route-polushkino.js"></script>
+    <script src="route-sima.js"></script>
+    <script src="route-mars.js"></script>
+    <script src="route-kubinka.js"></script>
+    <script src="route-chapaevka.js"></script>
+    <script src="route-sanatornaya.js"></script>
+    <script src="route-tuchkovo.js"></script>
+    <script src="route-gorodok.js"></script>
+    <script src="route-uspenskoe.js"></script>
+    <script src="route-zaharovo.js"></script>
+
+    <script src="places.js"></script>
+
+
+    <script>
+        //  Draw Routes 
+        //  https://onthegomap.com/
+
+        /*
+
+        Good Colors:
+
+        Yellow:
+
+            Желтая сера
+            #EDFF21
+
+            Золотой (Золотистый)
+            #FFD700
+
+            Лимонный
+            #FDE910
+
+            Рапсово-желтый
+            #F3DA0B
+
+            Шафрановый
+            #F4C430
+
+        Ярко-розовый
+            Ярко-розовый
+            #FC0FC0
+
+            Модная фуксия
+            #F400A1
+
+        Ярко-бирюзовый
+            #08E8DE
+
+        Мандариновый
+            #FF8800
+        */
+
+        map.on('load', () => {
+
+            mapAddLayer(map, 'kubinka', kubinka.route.path, '#EDFF21');
+
+            mapAddLayer(map, 'chapaevka', chapaevka.route.path, 'limegreen');
+
+            mapAddLayer(map, 'sanatornaya', sanatornaya.route.path, 'limegreen');
+
+            mapAddLayer(map, 'tuchkovo', tuchkovo.route.path, 'limegreen');
+
+            mapAddLayer(map, 'gorodok', gorodok.route.path, 'limegreen');
+
+            mapAddLayer(map, 'zaharovo', zaharovo.route.path, 'red');
+
+            mapAddLayer(map, 'uspenskoe', uspenskoe.route.path, '#007FFF');
+
+            mapAddLayer(map, 'sima', sima.route.path, 'limegreen');
+
+            mapAddLayer(map, 'mars', mars.route.path, 'fuchsia');
+
+            mapAddLayer(map, 'polushkino', polushkino.route.path, 'red');
+
+        });
+
+
+        function radiusServiceMarker(zoom) {
+            let radius = 4 * (zoom - 9);
+            if (zoom < 12)
+                radius = 0;
+
+            radius = radius.toFixed(0);
+
+            console.log('Zoom: ', zoom, 'Radius: ', radius);
+            return radius;
+        }
+
+
+        function addMarker(map, item) {
+            console.log('MARKER: ', item);
+
+            const elem = document.createElement('div');
+            elem.className = 'marker marker-service';
+
+            const radius = radiusServiceMarker(map.getZoom());
+            elem.style.width = `${radius}px`;
+            elem.style.height = `${radius}px`;
+            elem.style.backgroundImage = `url(\'${item.thumbnail}\')`;
+
+            const coordinates = item.point.reverse();
+            console.log('coordinates: ', coordinates);
+
+            new mapboxgl.Marker(elem)
+                .setLngLat(coordinates)
+                .setPopup(
+                    new mapboxgl.Popup({
+                        offset: 50
+                    })
+                    .setHTML(
+                        `<div class="popup">
+                        <h3>${item.title}</h3>
+                        <p></p>
+                        </div>`
+                    )
+                )
+                .addTo(map);
+            return elem;
+
+        }
+
+
+        for (const item of places)
+            addMarker(map, item);
+
+        map.on('zoom', () => {
+            const zoom = map.getZoom();
+            const radius = radiusServiceMarker(zoom);
+
+            for (const elem of document.getElementsByClassName("marker-service")) {
+                if (zoom < 12) {
+                    elem.classList.remove("show");
+                    elem.classList.add("hide");
+                    elem.style.border = 'none';
+                } else {
+                    elem.classList.remove("hide");
+                    elem.classList.add("show");
+                    elem.style.border = '.125rem solid rgba(255, 255, 255, 0.8)';
+                }
+
+                elem.style.width = `${radius}px`;
+                elem.style.height = `${radius}px`;
+
+            }
+        });
+    </script>
+</body>
+
+</html>

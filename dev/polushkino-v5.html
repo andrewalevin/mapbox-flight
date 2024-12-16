@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Query terrain elevation</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+
+
+    <script src="polushkino-v5-config.js"></script>
+
+
+    <script src="/Users/andrewlevin/Desktop/maps/notebook/data-output/gigerevo-stage1.js"></script>
+
+    <script src="/Users/andrewlevin/Desktop/maps/notebook/data-output/gigerevo-stage2.js"></script>
+
+    <script src="/Users/andrewlevin/Desktop/maps/notebook/data-output/gigerevo-stagemain.js"></script>
+
+    <script src="/Users/andrewlevin/Desktop/maps/notebook/data-output/gigerevo-stage4.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+    <style>
+        .mapboxgl-popup-content,
+        .mapboxgl-popup-tip {
+            opacity: 0.8;
+        }
+        
+        .mapboxgl-popup-content {
+            position: relative;
+            border-radius: 3px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+            padding: 8px;
+            pointer-events: auto;
+        }
+        
+        #pauseButton {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            padding: .75rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 200;
+            color: #222;
+            background-color: #eeeeee50;
+            font-size: 1rem;
+            font-weight: 100;
+            min-width: 6rem;
+            backdrop-filter: blur(1rem);
+        }
+        
+        #explore-map {
+            display: none;
+            position: absolute;
+            bottom: 6rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            padding: .75rem;
+            color: #ccc;
+            font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+            font-weight: 200;
+            font-size: 1.25rem;
+            font-weight: 100;
+            letter-spacing: 0.05rem;
+        }
+        
+        #explore-map a {
+            color: inherit;
+            font-family: inherit;
+            font-weight: 200;
+            text-decoration: none;
+            border: none;
+            border-bottom: .075rem solid transparent;
+            padding-bottom: .5rem;
+        }
+        
+        #explore-map a:hover {
+            text-decoration: none;
+            border-color: inherit;
+        }
+        
+        #gradient {
+            display: none;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            padding: 14rem;
+            width: 100%;
+            z-index: 1;
+            background: rgb(2, 0, 36);
+            background: linear-gradient(0deg, rgb(0 0 0 / 60%) 0%, rgb(0 0 0 / 30%) 50%, rgba(0, 0, 0, 0) 100%)
+        }
+        
+        .show {
+            display: block!important;
+        }
+        
+        .button-light {
+            background-color: #eeeeee90!important;
+        }
+        
+        .marker {
+            background-image: url(mapbox-icon.png);
+            background-size: cover;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
+            border: 2px solid white;
+            margin-top: -2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <div id="map"></div>
+
+    <div id="gradient"></div>
+    <div id="explore-map">
+        <p style="text-align: center;">Explore the Map</p>
+        <p style="text-align: center;"><a class="link-danger" href="https://andrewalevin.github.io/maps">https://andrewalevin.github.io/maps/zvenigorod</a></p>
+    </div>
+
+    <button id="pauseButton">Pause</button>
+
+    <script>
+        console.log('🚀 Start Script');
+        console.log('');
+
+        //mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmV3bGV2aW4iLCJhIjoiY2t5ZXM5c3cyMWJxYjJvcGJycmw0dGlyeSJ9.9QfCmimkyYicpprraBc-XQ';
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYW5kcmV3bGV2aW4iLCJhIjoiY2t5ZXM5c3cyMWJxYjJvcGJycmw0dGlyeSJ9.9QfCmimkyYicpprraBc-XQ';
+
+        let geojson = '';
+        //geojson = 'https://docs.mapbox.com/mapbox-gl-js/assets/route-pin.geojson';
+
+
+        geojson = 'https://andrewalevin.github.io/maps/dev/route-pin.geojson';
+
+        geojson = 'https://andrewalevin.github.io/maps/dev/gigerevo.geojson';
+        geojson = 'https://andrewalevin.github.io/maps/dev/gigerevo-reverted.geojson';
+        geojson = 'https://andrewalevin.github.io/maps/notebook/data-output/zvenigorod-route-1712096945.geojson';
+
+
+
+        var isPaused = false;
+
+        var pauseButton = document.getElementById('pauseButton');
+        pauseButton.addEventListener('click', function() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                console.log('🧲 now Pause');
+                pauseButton.textContent = 'Play';
+            } else {
+                console.log('🧲 now Play');
+                pauseButton.textContent = 'Pause';
+            }
+        });
+
+
+        (async() => {
+            const map = new mapboxgl.Map({
+                container: 'map',
+                zoom: zoomMap,
+                center: centerMap,
+                pitch: pitchMap,
+                bearing: bearingMap,
+                style: styleMap,
+                interactive: false,
+                hash: false
+            });
+
+
+
+            // Start downloading the route data, and wait for map load to occur in parallel
+            const [pinRouteGeojson] = await Promise.all([
+                fetch(
+                    geojson
+                ).then((response) => response.json()),
+
+            ]);
+
+            // Set custom fog
+            map.setFog({
+                'range': rangeFog,
+                'color': '#def',
+                'high-color': '#def',
+                'space-color': '#def'
+            });
+
+            // Add terrain source, with slight exaggeration
+            map.addSource('mapbox-dem', {
+                'type': 'raster-dem',
+                'url': 'mapbox://mapbox.terrain-rgb',
+                'tileSize': 512,
+                'maxzoom': 14
+            });
+            map.setTerrain({
+                'source': 'mapbox-dem',
+                'exaggeration': 1.5
+            });
+
+            const pinRoute000 = pinRouteGeojson.features[0].geometry.coordinates;
+
+            console.log('STAGE: ', stagemain);
+
+            const pinRoute = stagemain.route.path;
+
+            // Create the marker and popup that will display the elevation queries
+            const popup = new mapboxgl.Popup({
+                closeButton: false
+            });
+            const markerHeight = 50;
+            const markerRadius = 10;
+            const linearOffset = 25;
+            const marker = new mapboxgl.Marker({
+                    color: 'red',
+                    scale: 0.8,
+                    draggable: false,
+                    pitchAlignment: 'auto',
+                    rotationAlignment: 'auto',
+
+
+                })
+                .setLngLat(pinRoute[0])
+                .setPopup(popup)
+                .addTo(map)
+                .togglePopup();
+
+            // Add a line feature and layer. This feature will get updated as we progress the animation
+            map.addSource('line', {
+                type: 'geojson',
+                // Line metrics is required to use the 'line-progress' property
+                lineMetrics: true,
+                data: pinRouteGeojson
+            });
+            map.addLayer({
+                type: 'line',
+                source: 'line',
+                id: 'line',
+                paint: {
+                    'line-color': 'rgba(0,0,0,0)',
+                    'line-width': 5
+                },
+                layout: {
+                    'line-cap': 'round',
+                    'line-join': 'round'
+                }
+            });
+
+            await map.once('idle');
+
+            // The total animation duration, in milliseconds
+
+            // Use the https://turfjs.org/ library to calculate line distances and
+            // sample the line at a given percentage with the turf.along function.
+            const path = turf.lineString(pinRoute);
+            // Get the total line distance
+            const pathDistance = turf.lineDistance(path);
+
+
+            let distanceCalculator = 0;
+            let lastPoint = null;
+
+
+            let stages = [
+                //stage1,
+                //stage2,
+                stagemain,
+                stage4
+            ];
+
+            for (const idx in stages) {
+                stages[idx].target.distance = turf.lineDistance(turf.lineString(stages[idx].target.path));
+                stages[idx].camera.distance = turf.lineDistance(turf.lineString(stages[idx].camera.path));
+            }
+
+            let totalDistanceTarget = 0;
+            for (let idx in stages) totalDistanceTarget += stages[idx].target.distance;
+
+            let totalDistanceCamera = 0;
+            for (let idx in stages) totalDistanceTarget += stages[idx].camera.distance;
+
+            let lastTime = 0;
+            let totalTime = 0;
+
+            let stageIndex = 0;
+            let stageTime = 0;
+
+            function makeAtTheEnd() {
+                var gradient = document.getElementById('gradient');
+                gradient.classList.add("show");
+
+                var exploreBlock = document.getElementById('explore-map');
+                exploreBlock.classList.add("show");
+
+                var pauseButton = document.getElementById('pauseButton');
+                pauseButton.textContent = 'Restart';
+                pauseButton.classList.add('button-light');
+                pauseButton.addEventListener('click', function() {
+                    window.location.reload();
+                });
+
+            }
+
+
+            function addPopup(map) {
+                const item = {
+                    'coordinates': '55.640762, 36.582184',
+                    'title': 'Title',
+                    'description': 'zvenigorod-biostation-220px.png'
+                }
+
+                const elem = document.createElement('div');
+                const radius = 50;
+                elem.className = 'marker';
+                elem.style.width = `${radius}px`;
+                elem.style.height = `${radius}px`;
+
+
+                let img_content = '';
+                elem.style.backgroundImage = `url("file:///Users/andrewlevin/Desktop/maps/dev/zvenigorod-biostation-220px.png")`;
+                img_content = `<img loading="lazy" src="file:///Users/andrewlevin/Desktop/maps/dev/zvenigorod-biostation-220px.png"/>`;
+
+                new mapboxgl.Marker(elem)
+                    .setLngLat([36.599121, 55.602060])
+                    .setPopup(
+                        new mapboxgl.Popup({
+                            offset: 25
+                        })
+                        .setHTML(
+                            `<div class="popup"><h3>${item.title}</h3>
+                        <p>${img_content}</p></div>`
+                        )
+                    )
+                    .addTo(map);
+            }
+            addPopup(map);
+
+            function frame(time) {
+
+                if (!isPaused) {
+                    const deltaTime = time - lastTime;
+                    totalTime += deltaTime;
+                    stageTime += deltaTime;
+
+                    if (stageTime > stages[stageIndex].duration) {
+                        if (stageIndex == stages.length - 1) {
+
+                            makeAtTheEnd();
+
+
+                            console.log('');
+                            console.log('');
+                            console.log('🔥 Last Stage. Bye!');
+                            return;
+                        }
+                        console.log('');
+                        console.log('');
+                        console.log('');
+                        console.log('🦑🦑🦑 Switch stage!');
+
+                        stageIndex++;
+                        stageTime = deltaTime;
+
+                    }
+
+                    stage = stages[stageIndex];
+
+                    const phase = stageTime / stage.duration;
+
+                    console.log('🐝 Time: ', time);
+                    console.log('🎞 stageIndex: ', stageIndex, '⏳ stageTime', stageTime, 'phase: ', phase);
+
+
+                    // Get the new latitude and longitude by sampling along the path
+                    const alongPath = turf.along(path, pathDistance * phase).geometry.coordinates;
+                    const lngLat = {
+                        lng: alongPath[0],
+                        lat: alongPath[1]
+                    };
+
+                    // Sample the terrain elevation. We round to an integer value to
+                    // prevent showing a lot of digits during the animation
+                    const elevation = Math.floor(
+                        // Do not use terrain exaggeration to get actual meter values
+                        map.queryTerrainElevation(lngLat, {
+                            exaggerated: false
+                        })
+                    );
+
+
+                    // Reduce the visible length of the line by using a line-gradient to cutoff the line
+                    // phase is a value between 0 and 1 that reprents the progress of the animation
+                    map.setPaintProperty('line', 'line-gradient', [
+                        'step', ['line-progress'],
+                        'red',
+                        phase,
+                        'rgba(255, 0, 0, 0)'
+                    ]);
+
+                    const alongTarget = turf.along(
+                        turf.lineString(stage.target.path),
+                        stage.target.distance * phase
+                    ).geometry.coordinates;
+
+                    const alongCamera = turf.along(
+                        turf.lineString(stage.camera.path),
+                        stage.camera.distance * phase
+                    ).geometry.coordinates;
+
+
+                    const camera = map.getFreeCameraOptions();
+
+                    // Calculate Altitude descend usnong Custom Function
+                    let cameraAltitude = window[stage.camera.altitude_function](
+                        phase, stage.camera.altitude[0], stage.camera.altitude[1]);
+                    console.log('🏔 cameraAltitude: ', cameraAltitude);
+
+                    // set the position and altitude of the camera
+                    camera.position = mapboxgl.MercatorCoordinate.fromLngLat({
+                            lng: alongCamera[0],
+                            lat: alongCamera[1]
+                        },
+                        cameraAltitude
+                    );
+
+                    // tell the camera to look at a point along the route
+                    camera.lookAtPoint({
+                        lng: alongTarget[0],
+                        lat: alongTarget[1],
+                    });
+
+
+                    if (stage.camera.isSetPitchBearing) {
+                        let pitchValue = 0;
+                        let bearingValue = 0;
+
+                        if (stage.camera.bearing)
+                            pitchValue = stage2.camera.bearing
+
+                        if (stage.camera.pitch)
+                            pitchValue = stage.camera.pitch
+                        else {
+                            const altitudeKm = cameraAltitude / 1000;
+                            const pitchRadians = Math.atan(turf.distance(alongCamera, alongTarget) / altitudeKm);
+                            // Convert to Gradus
+                            pitchValue = pitchRadians * 57.2958;
+                        }
+                        camera.setPitchBearing(pitchValue, bearingValue);
+                    }
+
+                    map.setFreeCameraOptions(camera);
+
+                    marker.setLngLat(lngLat);
+
+                    if (lastPoint)
+                        distanceCalculator += turf.distance(turf.point(lastPoint), turf.point(alongPath), {
+                            units: 'kilometers'
+                        });
+                    lastPoint = alongPath;
+                    // Update the popup altitude value and marker location
+                    popup.setHTML(Math.trunc(distanceCalculator) + ' km<br/>');
+                }
+
+                lastTime = time;
+
+
+
+                window.requestAnimationFrame(frame);
+
+            }
+            window.requestAnimationFrame(frame);
+
+        })();
+    </script>
+
+</body>
+
+</html>

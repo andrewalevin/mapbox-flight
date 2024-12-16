@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Polushkino</title>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='50' fill='rgb(87,220,69)'/></svg>">
+
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+
+    <script src="polushkino-v5-config.js"></script>
+
+    <script src="gigerevo2-stagemain.js"></script>
+
+    <link rel="stylesheet" href="polushkino.css">
+
+</head>
+
+<body>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <div id="map"></div>
+
+    <div id="gradient"></div>
+    <div id="explore-map">
+        <p style="text-align: center;">Explore the Map</p>
+        <p style="text-align: center;">
+            <a class="link-danger" href="https://andrewalevin.github.io/maps">
+                https://andrewalevin.github.io/maps/zvenigorod</a></p>
+    </div>
+    <button id="pauseButton">Pause</button>
+
+    <script src="https://andrewalevin.github.io/mapbox-adventure/assets/js-yaml.min.js"></script>
+    <script src="cozy-spots-popup.js"></script>
+    <script>
+        console.log('🚀 Start Script');
+
+        mapboxgl.accessToken = config.token;
+
+        let isPaused = false;
+        document.getElementById('pauseButton').addEventListener('click', function() {
+            isPaused = !isPaused;
+            const action = isPaused ? 'Pause' : 'Play';
+            console.log(`🧲 now ${action}`);
+            pauseButton.textContent = action;});
+
+        let stages = [stagemain];
+
+        cameraPosition = stages[0].camera.data_geojson.geometry.coordinates[0];
+        targetPosition = stages[0].target.data_geojson.geometry.coordinates[1];
+
+        const cameraAltitude = stages[0].camera.altitude[0];
+        const targetAltitude = 0;
+
+        const deltaZ = cameraAltitude - targetAltitude;
+        const distance = turf.distance(cameraPosition, targetPosition); // Horizontal distance between the camera and target
+        const pitchStart = Math.atan2(deltaZ, distance) * (180 / Math.PI); // Convert to degrees
+        console.log('💎 pitchStart: ', pitchStart);
+
+        const bearingStart = turf.bearing(cameraPosition, targetPosition);
+        console.log('💎 bearingStart: ', bearingStart );
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            zoom: config.zoomMap,
+            center: cameraPosition,
+            pitch: 50,
+            bearing: -20,
+            style: config.styleMap,
+            interactive: false,
+            hash: false
+        });
+
+        map.on('load', () => {
+            map.setFog({
+                'range': config.rangeFog,
+                'color': '#def',
+                'high-color': '#def',
+                'space-color': '#def'});
+            map.addSource('mapbox-dem', {
+                'type': 'raster-dem',
+                'url': 'mapbox://mapbox.terrain-rgb',
+                'tileSize': 512,
+                'maxzoom': 14});
+            map.setTerrain({
+                'source': 'mapbox-dem',
+                'exaggeration': 1.5});
+            map.addSource('line', {
+                type: 'geojson',
+                // Line metrics is required to use the 'line-progress' property
+                lineMetrics: true,
+                data: stages[0].route.data_geojson});
+            map.addLayer({
+                type: 'line',
+                source: 'line',
+                id: 'line',
+                paint: {
+                    'line-color': 'rgba(0,0,0,0)',
+                    'line-width': 5
+                },
+                layout: {
+                    'line-cap': 'round',
+                    'line-join': 'round'
+                }});
+            addPopupCozySpot(map);
+
+            const popup = new mapboxgl.Popup({closeButton: false});
+            const marker = new mapboxgl.Marker({
+                color: 'red',
+                scale: 0.8,
+                draggable: false,
+                pitchAlignment: 'auto',
+                rotationAlignment: 'auto',
+            })
+                .setLngLat(stages[0].route.data_geojson.geometry.coordinates[0])
+                .setPopup(popup)
+                .addTo(map)
+                .togglePopup();
+
+            // Use the https://turfjs.org/ library to calculate line distances and
+            // sample the line at a given percentage with the turf.along function.
+
+            // Get the total line distance
+
+            stages.forEach(stage => {
+                stage.target.distance = turf.lineDistance(turf.lineString(stage.target.data_geojson.geometry.coordinates));
+                stage.camera.distance = turf.lineDistance(turf.lineString(stage.camera.data_geojson.geometry.coordinates));
+            });
+            const path = turf.lineString(stages[0].route.data_geojson.geometry.coordinates);
+            let distanceCalculator = 0;
+            let lastPoint = null;
+            let lastTime = 0;
+            let totalTime = 0;
+            let stageTime = 0;
+
+            let stageIndex = 0;
+            let stage = stages[stageIndex];
+
+            function frame(time) {
+                if (!isPaused) {
+                    const deltaTime = time - lastTime;
+                    totalTime += deltaTime;
+                    stageTime += deltaTime;
+
+                    if (stageTime > stages[stageIndex].duration) {
+                        stageIndex++;
+                        stageTime = deltaTime;
+                    }
+                    if (stageIndex > stages.length - 1) {
+                        console.log('\n\n\n🔥 Last Stage. Bye!');
+                        makeAtTheEnd();
+                        return;
+                    }
+
+                    stage = stages[stageIndex];
+
+                    const phase = stageTime / stage.duration;
+
+                    console.log('🐝 Time: ', time, '🎞 stageIndex: ', stageIndex, '⏳ stageTime', stageTime, 'phase: ', phase);
+
+                    map.setPaintProperty('line', 'line-gradient', [
+                        'step', ['line-progress'],
+                        'red',
+                        phase,
+                        'rgba(255, 0, 0, 0)']);
+
+                    // Get the new latitude and longitude by sampling along the path
+                    const alongPath = turf.along(path, turf.lineDistance(path) * phase).geometry.coordinates;
+                    const lngLat = {lng: alongPath[0], lat: alongPath[1]};
+
+                    const alongTarget = turf.along(
+                        turf.lineString(stage.target.data_geojson.geometry.coordinates),
+                        stage.target.distance * phase).geometry.coordinates;
+
+                    const alongCamera = turf.along(
+                        turf.lineString(stage.camera.data_geojson.geometry.coordinates),
+                        stage.camera.distance * phase).geometry.coordinates;
+
+
+                    // Calculate Altitude descend usnong Custom Function
+                    let cameraAltitude = window[stage.camera.altitude_function](
+                        phase, stage.camera.altitude[0], stage.camera.altitude[1]);
+                    console.log('🏔 cameraAltitude: ', cameraAltitude);
+
+
+                    // set the position and altitude of the camera
+                    const camera = map.getFreeCameraOptions();
+                    camera.position = mapboxgl.MercatorCoordinate.fromLngLat({
+                            lng: alongCamera[0],
+                            lat: alongCamera[1]
+                        }, cameraAltitude);
+
+                    // tell the camera to look at a point along the route
+                    camera.lookAtPoint({lng: alongTarget[0], lat: alongTarget[1]});
+
+                    if (stage.camera.isSetPitchBearing) {
+                        const bearingValue = stage.camera.bearing || 0;
+                        const pitchValue = stage.camera.pitch
+                            ? stage.camera.pitch
+                            : (() => {
+                                const altitudeKm = cameraAltitude / 1000;
+                                const pitchRadians = Math.atan(turf.distance(alongCamera, alongTarget) / altitudeKm);
+                                return pitchRadians * 57.2958; // Convert to degrees
+                            })();
+                        camera.setPitchBearing(pitchValue, bearingValue);}
+
+                    map.setFreeCameraOptions(camera);
+
+                    marker.setLngLat(lngLat);
+
+                    if (lastPoint)
+                        distanceCalculator += turf.distance(turf.point(lastPoint), turf.point(alongPath), {units: 'kilometers'});
+
+                    lastPoint = alongPath;
+                    // Update the popup altitude value and marker location
+                    const distance = Math.trunc(distanceCalculator);
+                    popup.setHTML(`${distance} km<br/>`);
+                }
+
+                lastTime = time;
+                window.requestAnimationFrame(frame);
+            }
+            window.requestAnimationFrame(frame);
+
+        })();
+    </script>
+
+</body>
+
+</html>
